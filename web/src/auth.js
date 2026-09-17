@@ -4,6 +4,11 @@ function apiUrl(path) {
   return path.startsWith("http") ? path : path;
 }
 
+function apiError(data, fallback) {
+  const message = data.error || fallback;
+  return data.requestId ? `${message} (Reference: ${data.requestId})` : message;
+}
+
 export function getSession() {
   try { return JSON.parse(localStorage.getItem(SESSION_KEY) || "null"); } catch { return null; }
 }
@@ -21,7 +26,7 @@ export async function requestOtp(email, baseUrl = "") {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }),
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "Could not send OTP.");
+  if (!response.ok) throw new Error(apiError(data, "Could not send OTP."));
   return data;
 }
 
@@ -30,7 +35,7 @@ export async function verifyOtp(email, code, baseUrl = "") {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, code }),
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "Could not verify OTP.");
+  if (!response.ok) throw new Error(apiError(data, "Could not verify OTP."));
   saveSession({ email: data.email, token: data.token });
   return data;
 }

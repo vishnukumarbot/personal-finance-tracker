@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-import { getStore } from "@netlify/blobs";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -7,10 +6,6 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Content-Type": "application/json",
 };
-
-const PASSWORD_STORE = "finance-tracker-users";
-const PASSWORD_MIN_LENGTH = 8;
-const PASSWORD_MAX_LENGTH = 128;
 
 export function corsHeaders() {
   return CORS_HEADERS;
@@ -22,60 +17,6 @@ export function response(statusCode, body) {
 
 export function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
-}
-
-export function passwordValidationError(password) {
-  if (typeof password !== "string" || password.length < PASSWORD_MIN_LENGTH) {
-    return `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`;
-  }
-  if (password.length > PASSWORD_MAX_LENGTH) {
-    return `Password must be no more than ${PASSWORD_MAX_LENGTH} characters.`;
-  }
-  return "";
-}
-
-function passwordKey(email) {
-  return `users/${crypto.createHash("sha256").update(email).digest("hex")}`;
-}
-
-function passwordDigest(password, salt) {
-  return crypto.scryptSync(password, salt, 64).toString("base64url");
-}
-
-function newPasswordRecord(password) {
-  const salt = crypto.randomBytes(16).toString("base64url");
-  return { version: 1, salt, digest: passwordDigest(password, salt) };
-}
-
-function digestMatches(password, record) {
-  if (record?.version !== 1 || !record.salt || !record.digest) return false;
-  const actual = Buffer.from(passwordDigest(password, record.salt));
-  const expected = Buffer.from(record.digest);
-  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
-}
-
-export async function checkPassword(email, password) {
-  const record = await getStore(PASSWORD_STORE).get(passwordKey(email), { type: "json" });
-  return record ? { exists: true, valid: digestMatches(password, record) } : { exists: false, valid: true };
-}
-
-export async function createPassword(email, password) {
-  const store = getStore(PASSWORD_STORE);
-  const result = await store.setJSON(
-    passwordKey(email),
-    newPasswordRecord(password),
-    { onlyIfNew: true },
-  );
-
-  if (result.modified) return true;
-
-  // Another request created the account first; only accept the same password.
-  const record = await store.get(passwordKey(email), { type: "json" });
-  return digestMatches(password, record);
-}
-
-export async function resetPassword(email, password) {
-  await getStore(PASSWORD_STORE).setJSON(passwordKey(email), newPasswordRecord(password));
 }
 
 export function requestId(event) {

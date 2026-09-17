@@ -10,14 +10,14 @@ Ledger is a responsive React web app for recording income and expenses, filterin
 - View total income, total expenses, and remaining balance
 - See an expense breakdown by category
 - Recover deleted transactions for 30 days
-- Sign in using a password plus a Twilio Verify email one-time code
+- Sign in using a Twilio Verify email one-time code
 - Persist account data in browser `localStorage`
 
 ## Tech stack
 
 - React 19 and Vite 7
 - Browser `localStorage` for transaction persistence
-- Netlify Functions and Netlify Blobs for password authentication
+- Netlify Functions for email OTP authentication
 - Twilio Verify for email OTP delivery
 - Node's built-in test runner for finance-domain tests
 
@@ -62,8 +62,7 @@ The Netlify base directory must be `web`. The included root `netlify.toml` build
 - Currency is fixed to USD for this first version.
 - Dashboard totals and category spending are all-time values; filters refine the transaction list only.
 - Local storage keeps the app simple and private, but data is device/browser-specific and can be cleared by the user. It is not cloud synchronization or a backup.
-- The first successful OTP verification registers the supplied password. Passwords are stored in Netlify Blobs only as salted scrypt hashes; later sign-ins require the password and a new OTP.
-- A forgotten or short legacy password can be replaced from the login screen after verifying a fresh email OTP. New passwords must contain at least 8 characters.
+- Authentication uses only the email address and emailed OTP; there is no password or password-reset flow.
 - Authentication identifies the local account namespace. Because transactions never leave the browser, the signed token does not protect a remote transaction API.
 - Spending is allowed only when the current aggregate balance can cover it. This baseline does not calculate historical daily balances from transaction dates.
 - Permanently deleting an item is immediate; the normal delete action first moves it to a 30-day recovery area.

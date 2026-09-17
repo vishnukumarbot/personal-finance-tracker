@@ -7,6 +7,10 @@ function apiUrl(path) {
   return `${API_BASE_URL}${path}`;
 }
 
+function normalizedEmail(email) {
+  return String(email || "").trim().toLowerCase();
+}
+
 function apiError(data, fallback) {
   const message = data.error || fallback;
   return data.requestId ? `${message} (Reference: ${data.requestId})` : message;
@@ -62,22 +66,20 @@ export async function requestOtp(email) {
   const response = await fetch(apiUrl("/api/request-otp"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: String(email || "").trim().toLowerCase() }),
+    body: JSON.stringify({ email: normalizedEmail(email) }),
   });
   const data = await responseData(response);
   if (!response.ok || data.error) throw new Error(apiError(data, "Could not send OTP."));
   return data;
 }
 
-export async function verifyOtp(email, code, password, { resetPassword = false } = {}) {
+export async function verifyOtp(email, code) {
   const response = await fetch(apiUrl("/api/verify-otp"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      email: String(email || "").trim().toLowerCase(),
+      email: normalizedEmail(email),
       code: String(code || "").trim(),
-      password: String(password || ""),
-      resetPassword,
     }),
   });
   const data = await responseData(response);

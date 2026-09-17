@@ -3,10 +3,6 @@ import {
   logProviderError,
   missingEnvironment,
   normalizeEmail,
-  passwordValidationError,
-  checkPassword,
-  createPassword,
-  resetPassword as replacePassword,
   requestId,
   response,
   signToken,
@@ -33,10 +29,8 @@ export async function handler(event) {
 
   let email;
   let code;
-  let password;
-  let resetPassword;
   try {
-    ({ email, code, password, resetPassword } = JSON.parse(event.body || "{}"));
+    ({ email, code } = JSON.parse(event.body || "{}"));
   } catch {
     return response(400, { error: "Request body must be valid JSON.", requestId: id });
   }
@@ -46,9 +40,6 @@ export async function handler(event) {
   if (!/^\S+@\S+\.\S+$/.test(normalized) || !/^\d{4,10}$/.test(otp)) {
     return response(400, { error: "Enter the email and OTP you received.", requestId: id });
   }
-  const passwordError = passwordValidationError(password);
-  if (passwordError) return response(400, { error: passwordError, requestId: id });
-
   try {
     const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
     const check = await client.verify.v2.services(process.env.TWILIO_VERIFY_SERVICE_SID).verificationChecks.create({
@@ -57,33 +48,8 @@ export async function handler(event) {
     });
 
     if (check.status !== "approved") return response(401, { error: "Invalid or expired OTP.", requestId: id });
-    const shouldResetPassword = resetPassword === true;
-    let passwordState;
-    try {
-      if (shouldResetPassword) {
-        await replacePassword(normalized, password);
-        passwordState = { exists: true, valid: true };
-      } else {
-        passwordState = await checkPassword(normalized, password);
-      }
-    } catch (error) {
-      logProviderError("password-check", id, error);
-      return response(502, { error: "Could not save or check your password. Please try again.", requestId: id });
-    }
-    if (!passwordState.valid) {
-      return response(401, { error: "Incorrect password. Request a new code to try again.", requestId: id });
-    }
-    if (!passwordState.exists && !(await createPassword(normalized, password))) {
-      return response(409, { error: "This account was created with a different password. Request a new code and try again.", requestId: id });
-    }
     console.info("verify-otp approved", { requestId: id, verificationSid: check.sid, status: check.status });
-    return response(200, {
-      ok: true,
-      email: normalized,
-      token: signToken(normalized),
-      passwordCreated: !passwordState.exists,
-      passwordReset: shouldResetPassword,
-    });
+    return response(200, { ok: true, email: normalized, token: signToken(normalized) });
   } catch (error) {
     logProviderError("verify-otp", id, error);
     return response(502, { error: "Could not verify the OTP. Please try again.", requestId: id });

@@ -1,6 +1,6 @@
 # Finance Tracker mobile app
 
-This is the Expo SDK 57 mobile client for Ledger. It uses the same password + email OTP service as the web app and stores transactions locally on the device.
+This is the Expo SDK 57 mobile client for Ledger. It uses the same email OTP service as the web app and stores transactions locally on the device.
 
 ## Run in Expo Go
 
@@ -23,8 +23,6 @@ npm run start:tunnel
 If Expo Go reports that the project is incompatible, update Expo Go. Android users can also install the matching Expo Go version from `https://expo.dev/go`.
 
 The production authentication API is the default. To use another Netlify site, copy `.env.example` to `.env`, update `EXPO_PUBLIC_API_BASE_URL`, and restart Expo after changing it.
-
-To replace a forgotten or 7-character legacy password, choose **Forgot or reset password?** on the login screen, enter a new password of at least 8 characters twice, and verify the emailed OTP.
 
 ## Native builds
 

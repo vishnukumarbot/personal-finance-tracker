@@ -10,7 +10,6 @@
     "test": "node --test"
   },
   "dependencies": {
-    "@netlify/blobs": "^11.1.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "twilio": "^5.10.3"

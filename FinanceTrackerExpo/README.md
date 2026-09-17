@@ -2,6 +2,8 @@
 
 This is the Expo SDK 57 mobile client for Ledger. It uses the same email OTP service as the web app and stores transactions locally on the device.
 
+Login requires the demonstration password `Cursor@123` followed by the emailed OTP. The fixed client-side password is intentionally simple for project demonstration and should be replaced with server-side authentication for production use.
+
 The transaction screen supports type, category, and inclusive From/To date filters. Transaction dates and filter dates use the native Android/iOS date picker.
 
 ## Run in Expo Go

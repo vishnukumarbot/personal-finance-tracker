@@ -1,8 +1,11 @@
 import React, { useState } from "react";
 import { requestOtp, verifyOtp } from "../auth";
 
+const DEMO_PASSWORD = "Cursor@123";
+
 export default function Login({ onLogin }) {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -11,6 +14,10 @@ export default function Login({ onLogin }) {
   async function sendCode(event) {
     event.preventDefault();
     setError("");
+    if (password !== DEMO_PASSWORD) {
+      setError("Incorrect password.");
+      return;
+    }
     setBusy(true);
     try {
       await requestOtp(email);
@@ -38,6 +45,7 @@ export default function Login({ onLogin }) {
   function changeEmail() {
     setSent(false);
     setCode("");
+    setPassword("");
     setError("");
   }
 
@@ -51,7 +59,7 @@ export default function Login({ onLogin }) {
         </div>
         <span className="eyebrow">PERSONAL FINANCE</span>
         <h1 id="login-title">Know where your money goes.</h1>
-        <p>Sign in with a one-time code sent to your email. Your finance data stays in this browser.</p>
+        <p>Sign in with your password and a one-time code sent to your email. Your finance data stays in this browser.</p>
 
         {!sent ? (
           <form onSubmit={sendCode} className="auth-form">
@@ -64,6 +72,16 @@ export default function Login({ onLogin }) {
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="you@example.com"
+            />
+            <label htmlFor="password">Password</label>
+            <input
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Enter password"
             />
             {error && <div className="error" role="alert">{error}</div>}
             <button className="primary" disabled={busy}>
@@ -101,7 +119,7 @@ export default function Login({ onLogin }) {
         )}
 
         <p className="auth-footnote">
-          <span aria-hidden="true">&#9679;</span> Secure email OTP sign in
+          <span aria-hidden="true">&#9679;</span> Password and email OTP sign in
         </p>
       </section>
     </main>

@@ -18,6 +18,7 @@ type Transaction = {
 };
 
 const CATEGORIES = ["Food", "Fuel", "Income", "Travel", "Bills", "Shopping", "Health", "Entertainment", "Salary", "Other"];
+const DEMO_PASSWORD = "Cursor@123";
 
 function formatDate(date: Date) {
   const day = String(date.getDate()).padStart(2, "0");
@@ -40,6 +41,7 @@ function dateTimestamp(value: string) {
 
 function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -49,6 +51,10 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
     setError("");
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
       setError("Enter a valid email address.");
+      return;
+    }
+    if (password !== DEMO_PASSWORD) {
+      setError("Incorrect password.");
       return;
     }
     setBusy(true);
@@ -79,7 +85,7 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
       <View style={styles.authCard}>
         <Text style={styles.eyebrow}>PERSONAL FINANCE</Text>
         <Text style={styles.authTitle}>Finance Tracker</Text>
-        <Text style={styles.authSubtitle}>Secure email OTP login</Text>
+        <Text style={styles.authSubtitle}>Password and email OTP login</Text>
         {!sent ? (
           <>
             <Text style={styles.label}>Email</Text>
@@ -91,6 +97,16 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
               value={email}
               onChangeText={setEmail}
               placeholder="you@example.com"
+            />
+            <Text style={styles.label}>Password</Text>
+            <TextInput
+              style={styles.input}
+              secureTextEntry
+              autoCapitalize="none"
+              autoComplete="current-password"
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Enter password"
             />
             <Pressable style={styles.addButton} onPress={send} disabled={busy}>
               <Text style={styles.addButtonText}>{busy ? "Sending..." : "Send Email Code"}</Text>
@@ -112,7 +128,7 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
             <Pressable style={styles.addButton} onPress={verify} disabled={busy}>
               <Text style={styles.addButtonText}>{busy ? "Verifying..." : "Verify & Login"}</Text>
             </Pressable>
-            <Pressable style={styles.linkButton} onPress={() => { setSent(false); setCode(""); setError(""); }}>
+            <Pressable style={styles.linkButton} onPress={() => { setSent(false); setCode(""); setPassword(""); setError(""); }}>
               <Text>Use a different email</Text>
             </Pressable>
           </>

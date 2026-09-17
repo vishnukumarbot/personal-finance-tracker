@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react";
+import React, { memo, useMemo, useState } from "react";
 import {
   CATEGORY_OPTIONS,
   formatCurrency,

@@ -1,4 +1,4 @@
-import { memo } from "react";
+import React, { memo } from "react";
 import { CATEGORIES, formatCurrency, formatDate } from "../finance";
 
 const SUMMARY_ITEMS = [

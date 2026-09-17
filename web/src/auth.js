@@ -69,7 +69,7 @@ export async function requestOtp(email) {
   return data;
 }
 
-export async function verifyOtp(email, code, password) {
+export async function verifyOtp(email, code, password, { resetPassword = false } = {}) {
   const response = await fetch(apiUrl("/api/verify-otp"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -77,6 +77,7 @@ export async function verifyOtp(email, code, password) {
       email: String(email || "").trim().toLowerCase(),
       code: String(code || "").trim(),
       password: String(password || ""),
+      resetPassword,
     }),
   });
   const data = await responseData(response);

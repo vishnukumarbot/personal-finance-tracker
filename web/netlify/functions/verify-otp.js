@@ -6,6 +6,7 @@ import {
   passwordValidationError,
   checkPassword,
   createPassword,
+  resetPassword as replacePassword,
   requestId,
   response,
   signToken,
@@ -33,8 +34,9 @@ export async function handler(event) {
   let email;
   let code;
   let password;
+  let resetPassword;
   try {
-    ({ email, code, password } = JSON.parse(event.body || "{}"));
+    ({ email, code, password, resetPassword } = JSON.parse(event.body || "{}"));
   } catch {
     return response(400, { error: "Request body must be valid JSON.", requestId: id });
   }
@@ -55,12 +57,18 @@ export async function handler(event) {
     });
 
     if (check.status !== "approved") return response(401, { error: "Invalid or expired OTP.", requestId: id });
+    const shouldResetPassword = resetPassword === true;
     let passwordState;
     try {
-      passwordState = await checkPassword(normalized, password);
+      if (shouldResetPassword) {
+        await replacePassword(normalized, password);
+        passwordState = { exists: true, valid: true };
+      } else {
+        passwordState = await checkPassword(normalized, password);
+      }
     } catch (error) {
       logProviderError("password-check", id, error);
-      return response(502, { error: "Could not check your password. Please try again.", requestId: id });
+      return response(502, { error: "Could not save or check your password. Please try again.", requestId: id });
     }
     if (!passwordState.valid) {
       return response(401, { error: "Incorrect password. Request a new code to try again.", requestId: id });
@@ -74,6 +82,7 @@ export async function handler(event) {
       email: normalized,
       token: signToken(normalized),
       passwordCreated: !passwordState.exists,
+      passwordReset: shouldResetPassword,
     });
   } catch (error) {
     logProviderError("verify-otp", id, error);

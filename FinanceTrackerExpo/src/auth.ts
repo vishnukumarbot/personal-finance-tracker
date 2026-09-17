@@ -18,4 +18,4 @@ async function call(path: string, body: object) {
 }
 
 export const requestOtp = (email: string) => call("/api/request-otp", { email });
-export async function verifyOtp(email: string, code: string, password: string) { const data = await call("/api/verify-otp", { email, code, password }); await saveSession(data); return data; }
+export async function verifyOtp(email: string, code: string, password: string, resetPassword = false) { const data = await call("/api/verify-otp", { email, code, password, resetPassword }); await saveSession(data); return data; }

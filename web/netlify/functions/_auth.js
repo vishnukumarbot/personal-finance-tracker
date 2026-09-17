@@ -42,6 +42,11 @@ function passwordDigest(password, salt) {
   return crypto.scryptSync(password, salt, 64).toString("base64url");
 }
 
+function newPasswordRecord(password) {
+  const salt = crypto.randomBytes(16).toString("base64url");
+  return { version: 1, salt, digest: passwordDigest(password, salt) };
+}
+
 function digestMatches(password, record) {
   if (record?.version !== 1 || !record.salt || !record.digest) return false;
   const actual = Buffer.from(passwordDigest(password, record.salt));
@@ -56,10 +61,9 @@ export async function checkPassword(email, password) {
 
 export async function createPassword(email, password) {
   const store = getStore(PASSWORD_STORE);
-  const salt = crypto.randomBytes(16).toString("base64url");
   const result = await store.setJSON(
     passwordKey(email),
-    { version: 1, salt, digest: passwordDigest(password, salt) },
+    newPasswordRecord(password),
     { onlyIfNew: true },
   );
 
@@ -68,6 +72,10 @@ export async function createPassword(email, password) {
   // Another request created the account first; only accept the same password.
   const record = await store.get(passwordKey(email), { type: "json" });
   return digestMatches(password, record);
+}
+
+export async function resetPassword(email, password) {
+  await getStore(PASSWORD_STORE).setJSON(passwordKey(email), newPasswordRecord(password));
 }
 
 export function requestId(event) {

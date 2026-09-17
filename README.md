@@ -63,6 +63,7 @@ The Netlify base directory must be `web`. The included root `netlify.toml` build
 - Dashboard totals and category spending are all-time values; filters refine the transaction list only.
 - Local storage keeps the app simple and private, but data is device/browser-specific and can be cleared by the user. It is not cloud synchronization or a backup.
 - The first successful OTP verification registers the supplied password. Passwords are stored in Netlify Blobs only as salted scrypt hashes; later sign-ins require the password and a new OTP.
+- A forgotten or short legacy password can be replaced from the login screen after verifying a fresh email OTP. New passwords must contain at least 8 characters.
 - Authentication identifies the local account namespace. Because transactions never leave the browser, the signed token does not protect a remote transaction API.
 - Spending is allowed only when the current aggregate balance can cover it. This baseline does not calculate historical daily balances from transaction dates.
 - Permanently deleting an item is immediate; the normal delete action first moves it to a 30-day recovery area.

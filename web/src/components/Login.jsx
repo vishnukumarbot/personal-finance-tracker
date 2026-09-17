@@ -4,8 +4,10 @@ import { requestOtp, verifyOtp } from "../auth";
 export default function Login({ onLogin }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [code, setCode] = useState("");
   const [sent, setSent] = useState(false);
+  const [resetMode, setResetMode] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -16,6 +18,7 @@ export default function Login({ onLogin }) {
 
     try {
       if (password.length < 8) throw new Error("Password must be at least 8 characters.");
+      if (resetMode && password !== confirmPassword) throw new Error("The new passwords do not match.");
       await requestOtp(email);
       setSent(true);
     } catch (requestError) {
@@ -31,7 +34,7 @@ export default function Login({ onLogin }) {
     setBusy(true);
 
     try {
-      onLogin(await verifyOtp(email, code, password));
+      onLogin(await verifyOtp(email, code, password, { resetPassword: resetMode }));
     } catch (verificationError) {
       setError(verificationError.message);
     } finally {
@@ -45,6 +48,15 @@ export default function Login({ onLogin }) {
     setError("");
   }
 
+  function toggleResetMode() {
+    setResetMode((current) => !current);
+    setPassword("");
+    setConfirmPassword("");
+    setCode("");
+    setSent(false);
+    setError("");
+  }
+
   return (
     <main className="auth-page">
       <section className="auth-card" aria-labelledby="login-title">
@@ -55,7 +67,11 @@ export default function Login({ onLogin }) {
         </div>
         <span className="eyebrow">PERSONAL FINANCE</span>
         <h1 id="login-title">Know where your money goes.</h1>
-        <p>Sign in with your password and a one-time email code. Your finance data stays in this browser.</p>
+        <p>
+          {resetMode
+            ? "Choose a new password, then confirm the change with a one-time email code."
+            : "Sign in with your password and a one-time email code. Your finance data stays in this browser."}
+        </p>
 
         {!sent ? (
           <form onSubmit={sendCode} className="auth-form">
@@ -69,11 +85,11 @@ export default function Login({ onLogin }) {
               onChange={(event) => setEmail(event.target.value)}
               placeholder="you@example.com"
             />
-            <label htmlFor="password">Password</label>
+            <label htmlFor="password">{resetMode ? "New password" : "Password"}</label>
             <input
               id="password"
               type="password"
-              autoComplete="current-password"
+              autoComplete={resetMode ? "new-password" : "current-password"}
               minLength="8"
               maxLength="128"
               required
@@ -81,10 +97,33 @@ export default function Login({ onLogin }) {
               onChange={(event) => setPassword(event.target.value)}
               placeholder="At least 8 characters"
             />
-            <p className="field-help">Your first verified sign-in creates this password.</p>
+            {resetMode && (
+              <>
+                <label htmlFor="confirm-password">Confirm new password</label>
+                <input
+                  id="confirm-password"
+                  type="password"
+                  autoComplete="new-password"
+                  minLength="8"
+                  maxLength="128"
+                  required
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  placeholder="Enter the new password again"
+                />
+              </>
+            )}
+            <p className="field-help">
+              {resetMode
+                ? "Use at least 8 characters. Your old password will be replaced after OTP verification."
+                : "Your first verified sign-in creates this password."}
+            </p>
             {error && <div className="error" role="alert">{error}</div>}
             <button className="primary" disabled={busy}>
-              {busy ? "Sending code..." : "Continue with email"}
+              {busy ? "Sending code..." : resetMode ? "Send reset code" : "Continue with email"}
+            </button>
+            <button type="button" className="text-button" onClick={toggleResetMode}>
+              {resetMode ? "Back to sign in" : "Forgot or need to reset password?"}
             </button>
           </form>
         ) : (
@@ -109,7 +148,7 @@ export default function Login({ onLogin }) {
             />
             {error && <div className="error" role="alert">{error}</div>}
             <button className="primary" disabled={busy}>
-              {busy ? "Checking code..." : "Open my dashboard"}
+              {busy ? "Checking code..." : resetMode ? "Reset password & sign in" : "Open my dashboard"}
             </button>
             <button type="button" className="text-button" onClick={changeEmail}>
               Use a different email or password
@@ -118,7 +157,7 @@ export default function Login({ onLogin }) {
         )}
 
         <p className="auth-footnote">
-          <span aria-hidden="true">&#9679;</span> Password + email verification
+          <span aria-hidden="true">&#9679;</span> {resetMode ? "Secure OTP password reset" : "Password + email verification"}
         </p>
       </section>
     </main>

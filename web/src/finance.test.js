@@ -1,11 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  CATEGORY_OPTIONS,
   calculateSummary,
   categoryBreakdown,
   filterTransactions,
   transactionValidationError,
 } from "./finance.js";
+
+test("expense categories include Fuel", () => {
+  assert.ok(CATEGORY_OPTIONS.expense.includes("Fuel"));
+});
 
 const transactions = [
   { id: "1", type: "income", amount: 1200.1, category: "Salary", date: "2026-09-01", createdAt: 1 },

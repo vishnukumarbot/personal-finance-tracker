@@ -163,6 +163,13 @@ a:focus-visible {
   margin-top: 5px;
 }
 
+.field-help {
+  margin: -5px 0 3px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
 .sent-to {
   display: grid;
   gap: 2px;

@@ -1,4 +1,11 @@
 const SESSION_KEY = "finance-tracker-session-v1";
+const configuredApiBaseUrl = String(import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+const API_BASE_URL = configuredApiBaseUrl
+  || (import.meta.env.DEV ? "https://vishnugfinancetracker.netlify.app" : "");
+
+function apiUrl(path) {
+  return `${API_BASE_URL}${path}`;
+}
 
 function apiError(data, fallback) {
   const message = data.error || fallback;
@@ -9,7 +16,7 @@ async function responseData(response) {
   const contentType = response.headers.get("content-type") || "";
   if (!contentType.includes("application/json")) {
     return {
-      error: "Authentication is unavailable. Deploy with Netlify or use Netlify Dev locally.",
+      error: "Authentication returned an unexpected response. Please try again.",
     };
   }
   return response.json().catch(() => ({ error: "The server returned an invalid response." }));
@@ -52,7 +59,7 @@ export function clearSession() {
 }
 
 export async function requestOtp(email) {
-  const response = await fetch("/api/request-otp", {
+  const response = await fetch(apiUrl("/api/request-otp"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email: String(email || "").trim().toLowerCase() }),
@@ -62,13 +69,14 @@ export async function requestOtp(email) {
   return data;
 }
 
-export async function verifyOtp(email, code) {
-  const response = await fetch("/api/verify-otp", {
+export async function verifyOtp(email, code, password) {
+  const response = await fetch(apiUrl("/api/verify-otp"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       email: String(email || "").trim().toLowerCase(),
       code: String(code || "").trim(),
+      password: String(password || ""),
     }),
   });
   const data = await responseData(response);

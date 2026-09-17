@@ -10,14 +10,14 @@ Ledger is a responsive React web app for recording income and expenses, filterin
 - View total income, total expenses, and remaining balance
 - See an expense breakdown by category
 - Recover deleted transactions for 30 days
-- Sign in using a Twilio Verify email one-time code
+- Sign in using a password plus a Twilio Verify email one-time code
 - Persist account data in browser `localStorage`
 
 ## Tech stack
 
 - React 19 and Vite 7
 - Browser `localStorage` for transaction persistence
-- Netlify Functions for passwordless authentication
+- Netlify Functions and Netlify Blobs for password authentication
 - Twilio Verify for email OTP delivery
 - Node's built-in test runner for finance-domain tests
 
@@ -32,14 +32,9 @@ cp .env.example .env
 npm run dev
 ```
 
-The Vite server can render the UI, but authentication endpoints require Netlify's local runtime. For a complete local flow, install or run the Netlify CLI and use:
+`npm run dev` uses the deployed Netlify authentication API by default, so login works from the local Vite site. To target another API, set `VITE_API_BASE_URL` in `web/.env`.
 
-```bash
-cd web
-npx netlify dev
-```
-
-Set the following environment variables in `.env` locally and in the Netlify site settings for production:
+Set the following environment variables in the Netlify site settings for production:
 
 ```text
 TWILIO_ACCOUNT_SID=
@@ -48,7 +43,7 @@ TWILIO_VERIFY_SERVICE_SID=
 AUTH_SECRET=
 ```
 
-`AUTH_SECRET` should be a long, random secret. Do not commit real credentials.
+`AUTH_SECRET` should be a long, random secret. The `TWILIO_*` and `AUTH_SECRET` values are server-only; never expose them as Vite variables or commit real credentials.
 
 ## Quality checks
 
@@ -60,13 +55,14 @@ npm run build
 
 ## Deployment
 
-The Netlify base directory must be `web`. The included `netlify.toml` builds the Vite app, publishes `web/dist`, bundles the authentication functions, and configures the required redirects.
+The Netlify base directory must be `web`. The included root `netlify.toml` builds the Vite app, publishes `web/dist`, bundles the authentication functions, and configures the required redirects. Pushes to the connected GitHub production branch create a new deploy of the same Netlify site and URL.
 
 ## Assumptions and trade-offs
 
 - Currency is fixed to USD for this first version.
 - Dashboard totals and category spending are all-time values; filters refine the transaction list only.
 - Local storage keeps the app simple and private, but data is device/browser-specific and can be cleared by the user. It is not cloud synchronization or a backup.
-- OTP identifies the local account namespace. Because transactions never leave the browser, the signed token does not protect a remote transaction API.
+- The first successful OTP verification registers the supplied password. Passwords are stored in Netlify Blobs only as salted scrypt hashes; later sign-ins require the password and a new OTP.
+- Authentication identifies the local account namespace. Because transactions never leave the browser, the signed token does not protect a remote transaction API.
 - Spending is allowed only when the current aggregate balance can cover it. This baseline does not calculate historical daily balances from transaction dates.
 - Permanently deleting an item is immediate; the normal delete action first moves it to a 30-day recovery area.

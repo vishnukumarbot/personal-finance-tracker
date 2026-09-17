@@ -13,9 +13,9 @@ export async function clearSession() { await AsyncStorage.removeItem(SESSION_KEY
 async function call(path: string, body: object) {
   const response = await fetch(`${API_BASE_URL}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "Request failed.");
+  if (!response.ok || data.error) throw new Error(data.error || "Request failed.");
   return data;
 }
 
 export const requestOtp = (email: string) => call("/api/request-otp", { email });
-export async function verifyOtp(email: string, code: string) { const data = await call("/api/verify-otp", { email, code }); await saveSession(data); return data; }
+export async function verifyOtp(email: string, code: string, password: string) { const data = await call("/api/verify-otp", { email, code, password }); await saveSession(data); return data; }

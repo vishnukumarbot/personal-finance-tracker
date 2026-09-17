@@ -2,6 +2,7 @@ export const CATEGORY_OPTIONS = Object.freeze({
   income: ["Salary", "Freelance", "Investment", "Gift", "Refund", "Other"],
   expense: [
     "Food",
+    "Fuel",
     "Transport",
     "Bills",
     "Shopping",

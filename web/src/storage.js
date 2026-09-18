@@ -6,6 +6,20 @@ const deletedKey = (email) =>
   `finance-tracker-deleted-v1:${String(email || "").trim().toLowerCase()}`;
 const migrationKey = (email) =>
   `finance-tracker-cloud-migrated-v1:${String(email || "").trim().toLowerCase()}`;
+const customCategoriesKey = (email) =>
+  `finance-tracker-custom-expense-categories-v1:${String(email || "").trim().toLowerCase()}`;
+
+function normalizeCategories(items) {
+  if (!Array.isArray(items)) return [];
+  const seen = new Set();
+  return items.flatMap((item) => {
+    const category = String(item || "").trim().replace(/\s+/g, " ");
+    const key = category.toLocaleLowerCase();
+    if (!category || category.length > 40 || seen.has(key)) return [];
+    seen.add(key);
+    return [category];
+  });
+}
 
 function validDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return false;
@@ -90,6 +104,26 @@ export function saveDeletedTransactions(email, transactions) {
   try {
     if (!email) return false;
     window.localStorage.setItem(deletedKey(email), JSON.stringify(transactions));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function loadCustomExpenseCategories(email) {
+  try {
+    if (!email) return [];
+    const raw = window.localStorage.getItem(customCategoriesKey(email));
+    return normalizeCategories(raw ? JSON.parse(raw) : []);
+  } catch {
+    return [];
+  }
+}
+
+export function saveCustomExpenseCategories(email, categories) {
+  try {
+    if (!email) return false;
+    window.localStorage.setItem(customCategoriesKey(email), JSON.stringify(normalizeCategories(categories)));
     return true;
   } catch {
     return false;

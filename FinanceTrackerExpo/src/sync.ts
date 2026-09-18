@@ -14,6 +14,7 @@ export type CloudState = {
   initialized: boolean;
   transactions: Transaction[];
   deletedTransactions: Transaction[];
+  customExpenseCategories: string[];
   revision: number;
   updatedAt: number;
 };

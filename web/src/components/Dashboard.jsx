@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { CATEGORIES, formatCurrency, formatDate } from "../finance";
+import { formatCurrency, formatDate } from "../finance";
 
 const SUMMARY_ITEMS = [
   { key: "income", label: "Total income", symbol: "↗" },
@@ -24,7 +24,7 @@ export const Summary = memo(function Summary({ summary }) {
   );
 });
 
-export const Filters = memo(function Filters({ filters, setFilters, resultCount }) {
+export const Filters = memo(function Filters({ categories, filters, setFilters, resultCount }) {
   const hasFilters = Object.values(filters).some((value) => value && value !== "all");
   const invalidRange = filters.from && filters.to && filters.from > filters.to;
 
@@ -69,7 +69,7 @@ export const Filters = memo(function Filters({ filters, setFilters, resultCount 
             onChange={(event) => update("category", event.target.value)}
           >
             <option value="all">All categories</option>
-            {CATEGORIES.map((item) => <option key={item}>{item}</option>)}
+            {categories.map((item) => <option key={item}>{item}</option>)}
           </select>
         </label>
 

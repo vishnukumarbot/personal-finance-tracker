@@ -52,3 +52,27 @@ test("add, delete, and restore preserve the transaction", () => {
   assert.deepEqual(state.transactions[0], income);
   assert.equal(state.deletedTransactions.length, 0);
 });
+
+test("custom expense categories are normalized and deduplicated", () => {
+  let state = applyAction(freshState(), { action: "addExpenseCategory", category: "  Pet   Care  " });
+  state = applyAction(state, { action: "addExpenseCategory", category: "pet care" });
+  state = applyAction(state, { action: "addExpenseCategory", category: "Food" });
+
+  assert.deepEqual(state.customExpenseCategories, ["Pet Care"]);
+});
+
+test("migration merges custom expense categories across devices", () => {
+  const state = {
+    ...freshState(),
+    initialized: true,
+    customExpenseCategories: ["Pets"],
+  };
+  const result = applyAction(state, {
+    action: "migrate",
+    transactions: [],
+    deletedTransactions: [],
+    customExpenseCategories: ["Home Maintenance", "pets"],
+  });
+
+  assert.deepEqual(result.customExpenseCategories, ["Pets", "Home Maintenance"]);
+});

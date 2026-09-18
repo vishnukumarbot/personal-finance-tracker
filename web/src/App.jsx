@@ -1,15 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { clearSession, getSession } from "./auth";
 import {
+  CATEGORIES,
+  CATEGORY_OPTIONS,
   calculateSummary,
   categoryBreakdown,
   filterTransactions,
 } from "./finance";
 import {
+  loadCustomExpenseCategories,
   loadDeletedTransactions,
   hasCloudMigration,
   loadTransactions,
   markCloudMigration,
+  saveCustomExpenseCategories,
   saveDeletedTransactions,
   saveTransactions,
 } from "./storage";
@@ -25,6 +29,19 @@ import {
 } from "./components/Dashboard";
 
 const INITIAL_FILTERS = { type: "all", category: "all", from: "", to: "" };
+
+function uniqueCategories(...groups) {
+  const categories = [];
+  const seen = new Set();
+  for (const category of groups.flat()) {
+    const normalized = String(category || "").trim();
+    const key = normalized.toLocaleLowerCase();
+    if (!normalized || seen.has(key)) continue;
+    seen.add(key);
+    categories.push(normalized);
+  }
+  return categories;
+}
 
 function transactionReducer(state, action) {
   switch (action.type) {
@@ -49,6 +66,9 @@ export default function App() {
   const [deletedTransactions, setDeletedTransactions] = useState(
     () => loadDeletedTransactions(session?.email),
   );
+  const [customExpenseCategories, setCustomExpenseCategories] = useState(
+    () => loadCustomExpenseCategories(session?.email),
+  );
   const [filters, setFilters] = useState(INITIAL_FILTERS);
   const [feedback, setFeedback] = useState(null);
   const [transactionStorageError, setTransactionStorageError] = useState(false);
@@ -65,6 +85,18 @@ export default function App() {
     () => filterTransactions(transactions, filters),
     [transactions, filters],
   );
+  const expenseCategories = useMemo(
+    () => uniqueCategories(CATEGORY_OPTIONS.expense, customExpenseCategories),
+    [customExpenseCategories],
+  );
+  const filterCategories = useMemo(
+    () => uniqueCategories(
+      CATEGORIES,
+      customExpenseCategories,
+      transactions.map((transaction) => transaction.category),
+    ).sort((a, b) => a.localeCompare(b)),
+    [customExpenseCategories, transactions],
+  );
 
   useEffect(() => {
     if (!session?.email) return;
@@ -76,6 +108,11 @@ export default function App() {
     setDeletedStorageError(!saveDeletedTransactions(session.email, deletedTransactions));
   }, [deletedTransactions, session?.email]);
 
+  useEffect(() => {
+    if (!session?.email) return;
+    saveCustomExpenseCategories(session.email, customExpenseCategories);
+  }, [customExpenseCategories, session?.email]);
+
   const applyCloudState = useCallback((cloud) => {
     if (!Array.isArray(cloud?.transactions) || !Array.isArray(cloud?.deletedTransactions)) return;
     const revision = Number(cloud.revision) || 0;
@@ -83,6 +120,9 @@ export default function App() {
     revisionRef.current = revision;
     dispatch({ type: "replace", transactions: cloud.transactions });
     setDeletedTransactions(cloud.deletedTransactions);
+    setCustomExpenseCategories(
+      Array.isArray(cloud.customExpenseCategories) ? cloud.customExpenseCategories : [],
+    );
   }, []);
 
   useEffect(() => {
@@ -99,6 +139,7 @@ export default function App() {
           cloud = await changeCloudState(session, "migrate", {
             transactions: loadTransactions(session.email),
             deletedTransactions: loadDeletedTransactions(session.email),
+            customExpenseCategories: loadCustomExpenseCategories(session.email),
           });
           markCloudMigration(session.email);
         }
@@ -131,6 +172,7 @@ export default function App() {
     setSession(nextSession);
     dispatch({ type: "replace", transactions: loadTransactions(nextSession.email) });
     setDeletedTransactions(loadDeletedTransactions(nextSession.email));
+    setCustomExpenseCategories(loadCustomExpenseCategories(nextSession.email));
     setFilters(INITIAL_FILTERS);
     setFeedback(null);
     setSyncError("");
@@ -158,12 +200,12 @@ export default function App() {
       setSyncError("");
       setSyncStatus("synced");
       setFeedback({ type: "success", message: successMessage });
-      return true;
+      return cloud;
     } catch (error) {
       setSyncError(error.message || "Could not synchronize your change.");
       setSyncStatus("offline");
       setFeedback({ type: "error", message: error.message || "Could not save your change." });
-      return false;
+      return null;
     } finally {
       mutationRef.current = false;
     }
@@ -173,6 +215,24 @@ export default function App() {
     (transaction) => runCloudAction("add", { transaction }, "Transaction added and synced."),
     [runCloudAction],
   );
+
+  const addExpenseCategory = useCallback(async (value) => {
+    const normalized = String(value || "").trim().replace(/\s+/g, " ");
+    const existing = expenseCategories.find(
+      (item) => item.toLocaleLowerCase() === normalized.toLocaleLowerCase(),
+    );
+    if (existing) return existing;
+
+    const cloud = await runCloudAction(
+      "addExpenseCategory",
+      { category: normalized },
+      "Expense category added and synced.",
+    );
+    if (!cloud) return null;
+    return uniqueCategories(CATEGORY_OPTIONS.expense, cloud.customExpenseCategories).find(
+      (item) => item.toLocaleLowerCase() === normalized.toLocaleLowerCase(),
+    ) || normalized;
+  }, [expenseCategories, runCloudAction]);
 
   const deleteTransaction = useCallback((id) => {
     runCloudAction("delete", { id }, "Transaction moved to recently deleted.");
@@ -242,8 +302,14 @@ export default function App() {
 
         <div className="dashboard-grid">
           <div className="main-column">
-            <TransactionForm balance={summary.balance} onAdd={addTransaction} />
+            <TransactionForm
+              balance={summary.balance}
+              expenseCategories={expenseCategories}
+              onAdd={addTransaction}
+              onAddExpenseCategory={addExpenseCategory}
+            />
             <Filters
+              categories={filterCategories}
               filters={filters}
               setFilters={setFilters}
               resultCount={filteredTransactions.length}

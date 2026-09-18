@@ -5,13 +5,14 @@ Ledger is a responsive React web and Expo Android app for recording income and e
 ## Features
 
 - Add validated income and expense transactions with an amount, category, and date
+- Create custom expense categories that synchronize to every device on the same account
 - Prevent expenses and other actions that would create a negative balance
 - Filter by transaction type, category, and inclusive date range
 - View total income, total expenses, and remaining balance
 - See an expense breakdown by category
 - Recover deleted transactions for 30 days
 - Sign in using the fixed demo password and a Twilio Verify email one-time code
-- Synchronize account data across web browsers and Android devices
+- Synchronize transactions and custom expense categories across web browsers and Android devices
 - Keep a local device cache so the last synchronized data remains visible during a connection problem
 
 ## Tech stack

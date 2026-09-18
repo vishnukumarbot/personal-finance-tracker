@@ -539,6 +539,36 @@ select:focus {
 
 .amount-input input { padding-left: 26px; }
 
+.category-control { min-width: 0; }
+
+.custom-category-toggle {
+  margin-top: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--forest);
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.custom-category-editor {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) auto auto;
+  align-items: center;
+  gap: 9px;
+  margin-top: 12px;
+}
+
+.save-category-button {
+  min-height: 43px;
+  padding: 9px 13px;
+  background: #e5efe9;
+  color: var(--forest);
+}
+
+.cancel-category-button { padding-inline: 5px; }
+.category-error { margin-top: 10px; }
+
 .primary,
 .small-button {
   border: 0;
@@ -864,6 +894,8 @@ footer {
   .summary-card { min-height: auto; }
   .form-grid,
   .filter-grid { grid-template-columns: 1fr; }
+  .custom-category-editor { grid-template-columns: 1fr; }
+  .cancel-category-button { justify-self: start; }
   .card { padding: 19px; }
   .card-heading { gap: 12px; }
   .balance-pill { display: none; }

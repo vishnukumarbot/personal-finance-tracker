@@ -5,6 +5,19 @@ import { corsHeaders, verifyToken } from "./_auth.js";
 const STORE_NAME = "finance-tracker-accounts";
 const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
 const MAX_TRANSACTIONS = 5_000;
+const MAX_CUSTOM_EXPENSE_CATEGORIES = 50;
+const BUILT_IN_EXPENSE_CATEGORIES = new Set([
+  "Food",
+  "Fuel",
+  "Transport",
+  "Bills",
+  "Shopping",
+  "Health",
+  "Entertainment",
+  "Travel",
+  "Education",
+  "Other",
+].map((category) => category.toLocaleLowerCase()));
 
 function apiError(message, statusCode = 400) {
   const error = new Error(message);
@@ -69,6 +82,35 @@ function normalizeList(items, deleted = false) {
   return [...byId.values()];
 }
 
+function normalizeCategoryName(value) {
+  const category = String(value || "").trim().replace(/\s+/g, " ");
+  if (!category || category.length > 40) {
+    throw apiError("A custom category must be between 1 and 40 characters.");
+  }
+  return category;
+}
+
+function normalizeCustomExpenseCategories(items) {
+  if (!Array.isArray(items)) throw apiError("Custom categories must be provided as a list.");
+  const categories = [];
+  const seen = new Set(BUILT_IN_EXPENSE_CATEGORIES);
+  for (const item of items) {
+    const category = normalizeCategoryName(item);
+    const key = category.toLocaleLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    categories.push(category);
+    if (categories.length > MAX_CUSTOM_EXPENSE_CATEGORIES) {
+      throw apiError(`You can save up to ${MAX_CUSTOM_EXPENSE_CATEGORIES} custom expense categories.`);
+    }
+  }
+  return categories;
+}
+
+function mergeCustomExpenseCategories(current, incoming) {
+  return normalizeCustomExpenseCategories([...(current || []), ...(incoming || [])]);
+}
+
 function balanceInCents(transactions) {
   return transactions.reduce((balance, transaction) => {
     const amount = Math.round(transaction.amount * 100);
@@ -83,7 +125,14 @@ function ensureValidBalance(transactions) {
 }
 
 export function freshState() {
-  return { initialized: false, transactions: [], deletedTransactions: [], revision: 0, updatedAt: 0 };
+  return {
+    initialized: false,
+    transactions: [],
+    deletedTransactions: [],
+    customExpenseCategories: [],
+    revision: 0,
+    updatedAt: 0,
+  };
 }
 
 function normalizeStoredState(value) {
@@ -91,11 +140,13 @@ function normalizeStoredState(value) {
   const now = Date.now();
   let transactions;
   let deletedTransactions;
+  let customExpenseCategories;
   try {
     transactions = normalizeList(value.transactions || []);
     deletedTransactions = normalizeList(value.deletedTransactions || [], true).filter(
       (item) => now - item.deletedAt <= THIRTY_DAYS,
     );
+    customExpenseCategories = normalizeCustomExpenseCategories(value.customExpenseCategories || []);
   } catch {
     throw apiError("Stored account data could not be read.", 500);
   }
@@ -105,6 +156,7 @@ function normalizeStoredState(value) {
     initialized: Boolean(value.initialized),
     transactions: transactions.filter((item) => !deletedIds.has(item.id)),
     deletedTransactions,
+    customExpenseCategories,
     revision: Math.max(0, Number(value.revision) || 0),
     updatedAt: Math.max(0, Number(value.updatedAt) || 0),
   };
@@ -134,6 +186,10 @@ function mergeMigration(state, body) {
     initialized: true,
     transactions,
     deletedTransactions: [...deletedById.values()],
+    customExpenseCategories: mergeCustomExpenseCategories(
+      state.customExpenseCategories,
+      body.customExpenseCategories,
+    ),
   };
 }
 
@@ -147,6 +203,12 @@ export function applyAction(state, body) {
       const transactions = [transaction, ...state.transactions];
       ensureValidBalance(transactions);
       return { ...state, initialized: true, transactions };
+    }
+    case "addExpenseCategory": {
+      const category = normalizeCategoryName(body.category);
+      const categories = mergeCustomExpenseCategories(state.customExpenseCategories, [category]);
+      if (categories.length === (state.customExpenseCategories || []).length) return state;
+      return { ...state, initialized: true, customExpenseCategories: categories };
     }
     case "delete": {
       const id = String(body.id || "");

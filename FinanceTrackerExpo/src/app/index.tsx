@@ -4,9 +4,11 @@ import { Alert, AppState, Modal, Pressable, ScrollView, StyleSheet, Text, TextIn
 import { clearSession, getSession, requestOtp, verifyOtp } from "../auth";
 import {
   hasCloudMigration,
+  loadCustomExpenseCategories,
   loadDeletedTransactions,
   loadTransactions,
   markCloudMigration,
+  saveCustomExpenseCategories,
   saveDeletedTransactions,
   saveTransactions,
 } from "../storage";
@@ -17,8 +19,22 @@ type FilterType = "all" | TransactionType;
 type FilterDateTarget = "from" | "to" | null;
 type Session = { email: string; token: string };
 
-const CATEGORIES = ["Food", "Fuel", "Income", "Travel", "Bills", "Shopping", "Health", "Entertainment", "Salary", "Other"];
+const EXPENSE_CATEGORIES = ["Food", "Fuel", "Transport", "Bills", "Shopping", "Health", "Entertainment", "Travel", "Education", "Other"];
+const INCOME_CATEGORIES = ["Salary", "Freelance", "Investment", "Gift", "Refund", "Other"];
 const DEMO_PASSWORD = "Cursor@123";
+
+function uniqueCategories(...groups: string[][]) {
+  const categories: string[] = [];
+  const seen = new Set<string>();
+  for (const category of groups.flat()) {
+    const normalized = String(category || "").trim();
+    const key = normalized.toLocaleLowerCase();
+    if (!normalized || seen.has(key)) continue;
+    seen.add(key);
+    categories.push(normalized);
+  }
+  return categories;
+}
 
 function toIsoDate(date: Date) {
   const year = date.getFullYear();
@@ -158,12 +174,14 @@ export default function HomeScreen() {
   const [ready, setReady] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [deletedTransactions, setDeletedTransactions] = useState<Transaction[]>([]);
+  const [customExpenseCategories, setCustomExpenseCategories] = useState<string[]>([]);
   const [type, setType] = useState<TransactionType>("expense");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("Food");
   const [date, setDate] = useState(toIsoDate(new Date()));
   const [showDate, setShowDate] = useState(false);
   const [showCategories, setShowCategories] = useState(false);
+  const [customCategoryName, setCustomCategoryName] = useState("");
   const [filterType, setFilterType] = useState<FilterType>("all");
   const [filterCategory, setFilterCategory] = useState("all");
   const [filterFrom, setFilterFrom] = useState("");
@@ -189,10 +207,13 @@ export default function HomeScreen() {
     revisionRef.current = revision;
     setTransactions(cloud.transactions);
     setDeletedTransactions(cloud.deletedTransactions);
+    const cloudCategories = Array.isArray(cloud.customExpenseCategories) ? cloud.customExpenseCategories : [];
+    setCustomExpenseCategories(cloudCategories);
     if (session?.email) {
       Promise.all([
         saveTransactions(session.email, cloud.transactions),
         saveDeletedTransactions(session.email, cloud.deletedTransactions),
+        saveCustomExpenseCategories(session.email, cloudCategories),
       ]).catch(() => setSyncError("Cloud data is safe, but this device could not update its offline cache."));
     }
   }, [session?.email]);
@@ -205,13 +226,15 @@ export default function HomeScreen() {
       let cloud = await getCloudState(session.token);
       const migrated = await hasCloudMigration(session.email);
       if (!migrated || !cloud.initialized) {
-        const [localTransactions, localDeleted] = await Promise.all([
+        const [localTransactions, localDeleted, localCategories] = await Promise.all([
           loadTransactions(session.email),
           loadDeletedTransactions(session.email),
+          loadCustomExpenseCategories(session.email),
         ]);
         cloud = await changeCloudState(session.token, "migrate", {
           transactions: localTransactions,
           deletedTransactions: localDeleted,
+          customExpenseCategories: localCategories,
         });
         await markCloudMigration(session.email);
       }
@@ -229,10 +252,15 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!session?.email) return;
     let active = true;
-    Promise.all([loadTransactions(session.email), loadDeletedTransactions(session.email)]).then(async ([saved, deleted]) => {
+    Promise.all([
+      loadTransactions(session.email),
+      loadDeletedTransactions(session.email),
+      loadCustomExpenseCategories(session.email),
+    ]).then(async ([saved, deleted, categories]) => {
       if (!active) return;
       setTransactions(saved);
       setDeletedTransactions(deleted);
+      setCustomExpenseCategories(categories);
       await synchronize();
     });
     return () => { active = false; };
@@ -249,6 +277,31 @@ export default function HomeScreen() {
       subscription.remove();
     };
   }, [session, synchronize]);
+
+  const expenseCategories = useMemo(
+    () => uniqueCategories(EXPENSE_CATEGORIES, customExpenseCategories),
+    [customExpenseCategories],
+  );
+  const categoryOptions = type === "expense" ? expenseCategories : INCOME_CATEGORIES;
+  const filterCategories = useMemo(
+    () => uniqueCategories(
+      EXPENSE_CATEGORIES,
+      INCOME_CATEGORIES,
+      customExpenseCategories,
+      transactions.map((transaction) => transaction.category),
+    ).sort((a, b) => a.localeCompare(b)),
+    [customExpenseCategories, transactions],
+  );
+  const categoryBreakdown = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const transaction of transactions) {
+      if (transaction.type !== "expense") continue;
+      totals.set(transaction.category, (totals.get(transaction.category) || 0) + transaction.amount);
+    }
+    return [...totals.entries()]
+      .map(([name, total]) => ({ name, total }))
+      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+  }, [transactions]);
 
   const totalIncome = useMemo(
     () => transactions.filter((transaction) => transaction.type === "income").reduce((sum, transaction) => sum + transaction.amount, 0),
@@ -291,7 +344,7 @@ export default function HomeScreen() {
       setSyncError("");
       setSyncStatus("synced");
       if (successMessage) Alert.alert("Success", successMessage);
-      return true;
+      return cloud;
     } catch (error: any) {
       const message = error.message || "Could not save your change.";
       setSyncError(message);
@@ -301,6 +354,46 @@ export default function HomeScreen() {
     } finally {
       mutationRef.current = false;
     }
+  }
+
+  function changeTransactionType(nextType: TransactionType) {
+    setType(nextType);
+    setCategory(nextType === "expense" ? expenseCategories[0] : INCOME_CATEGORIES[0]);
+  }
+
+  async function addCustomExpenseCategory() {
+    const normalized = customCategoryName.trim().replace(/\s+/g, " ");
+    if (!normalized) {
+      Alert.alert("Category required", "Enter a category name.");
+      return;
+    }
+    if (normalized.length > 40) {
+      Alert.alert("Category too long", "Category names can contain up to 40 characters.");
+      return;
+    }
+
+    const existing = expenseCategories.find(
+      (item) => item.toLocaleLowerCase() === normalized.toLocaleLowerCase(),
+    );
+    if (existing) {
+      setCategory(existing);
+      setCustomCategoryName("");
+      setShowCategories(false);
+      return;
+    }
+
+    const cloud = await runCloudAction(
+      "addExpenseCategory",
+      { category: normalized },
+      "Expense category added and synced.",
+    );
+    if (!cloud) return;
+    const savedCategory = uniqueCategories(EXPENSE_CATEGORIES, cloud.customExpenseCategories).find(
+      (item) => item.toLocaleLowerCase() === normalized.toLocaleLowerCase(),
+    ) || normalized;
+    setCategory(savedCategory);
+    setCustomCategoryName("");
+    setShowCategories(false);
   }
 
   async function addTransaction() {
@@ -329,6 +422,7 @@ export default function HomeScreen() {
     revisionRef.current = -1;
     setTransactions([]);
     setDeletedTransactions([]);
+    setCustomExpenseCategories([]);
     setSyncError("");
     setSyncStatus("idle");
     setSession(null);
@@ -393,10 +487,10 @@ export default function HomeScreen() {
         <Text style={styles.sectionTitle}>Add Transaction</Text>
         <Text style={styles.label}>Transaction Type</Text>
         <View style={styles.typeRow}>
-          <Pressable style={[styles.typeButton, type === "income" && styles.selectedButton]} onPress={() => setType("income")}>
+          <Pressable style={[styles.typeButton, type === "income" && styles.selectedButton]} onPress={() => changeTransactionType("income")}>
             <Text style={type === "income" ? styles.selectedButtonText : styles.typeButtonText}>Income</Text>
           </Pressable>
-          <Pressable style={[styles.typeButton, type === "expense" && styles.selectedButton]} onPress={() => setType("expense")}>
+          <Pressable style={[styles.typeButton, type === "expense" && styles.selectedButton]} onPress={() => changeTransactionType("expense")}>
             <Text style={type === "expense" ? styles.selectedButtonText : styles.typeButtonText}>Expense</Text>
           </Pressable>
         </View>
@@ -454,6 +548,18 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.transactionsCard}>
+        <Text style={styles.sectionTitle}>Expense by Category</Text>
+        {categoryBreakdown.length === 0 ? (
+          <Text style={styles.emptyText}>Expense categories will appear here.</Text>
+        ) : categoryBreakdown.map((item) => (
+          <View key={item.name} style={styles.breakdownRow}>
+            <Text style={styles.transactionCategory}>{item.name}</Text>
+            <Text style={styles.breakdownAmount}>${item.total.toFixed(2)}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={styles.transactionsCard}>
         <Text style={styles.sectionTitle}>Transactions</Text>
         {filteredTransactions.length === 0 ? (
           <Text style={styles.emptyText}>{transactions.length === 0 ? "No transactions yet." : "No transactions match these filters."}</Text>
@@ -505,11 +611,33 @@ export default function HomeScreen() {
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.sectionTitle}>Select Category</Text>
-            {CATEGORIES.map((value) => (
-              <Pressable key={value} style={styles.option} onPress={() => { setCategory(value); setShowCategories(false); }}>
-                <Text style={styles.optionText}>{value}</Text>
-              </Pressable>
-            ))}
+            <ScrollView keyboardShouldPersistTaps="handled">
+              {categoryOptions.map((value) => (
+                <Pressable key={value} style={styles.option} onPress={() => { setCategory(value); setShowCategories(false); }}>
+                  <Text style={styles.optionText}>{value}</Text>
+                </Pressable>
+              ))}
+              {type === "expense" && (
+                <View style={styles.customCategoryEditor}>
+                  <Text style={styles.label}>Add a custom expense category</Text>
+                  <View style={styles.customCategoryRow}>
+                    <TextInput
+                      style={styles.customCategoryInput}
+                      value={customCategoryName}
+                      onChangeText={setCustomCategoryName}
+                      placeholder="Example: Pet care"
+                      maxLength={40}
+                      returnKeyType="done"
+                      onSubmitEditing={addCustomExpenseCategory}
+                    />
+                    <Pressable style={styles.customCategoryButton} onPress={addCustomExpenseCategory} disabled={syncStatus === "syncing"}>
+                      <Text style={styles.customCategoryButtonText}>{syncStatus === "syncing" ? "Saving..." : "Add"}</Text>
+                    </Pressable>
+                  </View>
+                  <Text style={styles.categoryHint}>Saved to this account and available on all signed-in devices.</Text>
+                </View>
+              )}
+            </ScrollView>
             <Pressable style={styles.secondaryButton} onPress={() => setShowCategories(false)}><Text>Cancel</Text></Pressable>
           </View>
         </View>
@@ -519,11 +647,13 @@ export default function HomeScreen() {
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.sectionTitle}>Filter by Category</Text>
-            {["all", ...CATEGORIES].map((value) => (
-              <Pressable key={value} style={styles.option} onPress={() => { setFilterCategory(value); setShowFilterCategories(false); }}>
-                <Text style={styles.optionText}>{value === "all" ? "All categories" : value}</Text>
-              </Pressable>
-            ))}
+            <ScrollView>
+              {["all", ...filterCategories].map((value) => (
+                <Pressable key={value} style={styles.option} onPress={() => { setFilterCategory(value); setShowFilterCategories(false); }}>
+                  <Text style={styles.optionText}>{value === "all" ? "All categories" : value}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
             <Pressable style={styles.secondaryButton} onPress={() => setShowFilterCategories(false)}><Text>Cancel</Text></Pressable>
           </View>
         </View>
@@ -602,6 +732,8 @@ const styles = StyleSheet.create({
   transactionDate: { color: "#777", marginTop: 4 },
   transactionIncome: { fontWeight: "bold", fontSize: 16, color: "#138a52" },
   transactionExpense: { fontWeight: "bold", fontSize: 16, color: "#d44747" },
+  breakdownRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#eee" },
+  breakdownAmount: { color: "#d44747", fontSize: 16, fontWeight: "700" },
   transactionRight: { alignItems: "flex-end", gap: 6 },
   deleteButton: { paddingVertical: 6, paddingHorizontal: 8, borderRadius: 6, backgroundColor: "#ffecec" },
   deleteButtonText: { fontSize: 12, fontWeight: "700", color: "#b33d3d" },
@@ -619,5 +751,11 @@ const styles = StyleSheet.create({
   modalCard: { backgroundColor: "#fff", padding: 22, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "85%" },
   option: { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: "#eee" },
   optionText: { fontSize: 17 },
+  customCategoryEditor: { paddingTop: 18 },
+  customCategoryRow: { flexDirection: "row", gap: 8, alignItems: "stretch" },
+  customCategoryInput: { flex: 1, borderWidth: 1, borderColor: "#ccc", borderRadius: 8, padding: 12, fontSize: 16, backgroundColor: "#fff" },
+  customCategoryButton: { minWidth: 72, justifyContent: "center", alignItems: "center", borderRadius: 8, paddingHorizontal: 12, backgroundColor: "#222" },
+  customCategoryButtonText: { color: "#fff", fontWeight: "700" },
+  categoryHint: { color: "#666", fontSize: 12, lineHeight: 17, marginTop: 8 },
   secondaryButton: { padding: 15, alignItems: "center", marginTop: 8, backgroundColor: "#eef1f6", borderRadius: 8 },
 });

@@ -1,35 +1,49 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
-import React, { useEffect, useMemo, useState } from "react";
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, AppState, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { clearSession, getSession, requestOtp, verifyOtp } from "../auth";
-import { loadDeletedTransactions, loadTransactions, saveDeletedTransactions, saveTransactions } from "../storage";
+import {
+  hasCloudMigration,
+  loadDeletedTransactions,
+  loadTransactions,
+  markCloudMigration,
+  saveDeletedTransactions,
+  saveTransactions,
+} from "../storage";
+import { changeCloudState, CloudState, getCloudState, Transaction } from "../sync";
 
 type TransactionType = "income" | "expense";
 type FilterType = "all" | TransactionType;
 type FilterDateTarget = "from" | "to" | null;
-type Session = { email: string };
-type Transaction = {
-  id: string;
-  type: TransactionType;
-  amount: number;
-  category: string;
-  date: string;
-  deletedAt?: number;
-};
+type Session = { email: string; token: string };
 
 const CATEGORIES = ["Food", "Fuel", "Income", "Travel", "Bills", "Shopping", "Health", "Entertainment", "Salary", "Other"];
 const DEMO_PASSWORD = "Cursor@123";
 
-function formatDate(date: Date) {
+function toIsoDate(date: Date) {
+  const year = date.getFullYear();
   const day = String(date.getDate()).padStart(2, "0");
   const month = String(date.getMonth() + 1).padStart(2, "0");
-  return `${day}-${month}-${date.getFullYear()}`;
+  return `${year}-${month}-${day}`;
 }
 
 function dateFromStored(value: string) {
-  const [day, month, year] = value.split("-").map(Number);
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const legacyMatch = /^(\d{2})-(\d{2})-(\d{4})$/.exec(value);
+  const year = Number(isoMatch?.[1] || legacyMatch?.[3]);
+  const month = Number(isoMatch?.[2] || legacyMatch?.[2]);
+  const day = Number(isoMatch?.[3] || legacyMatch?.[1]);
   const parsed = new Date(year, month - 1, day);
-  return day && month && year && !Number.isNaN(parsed.getTime()) ? parsed : new Date();
+  return day && month && year && parsed.getFullYear() === year && parsed.getMonth() === month - 1 && parsed.getDate() === day
+    ? parsed
+    : new Date();
+}
+
+function displayDate(value: string) {
+  const date = dateFromStored(value);
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${day}-${month}-${date.getFullYear()}`;
 }
 
 function dateTimestamp(value: string) {
@@ -147,7 +161,7 @@ export default function HomeScreen() {
   const [type, setType] = useState<TransactionType>("expense");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("Food");
-  const [date, setDate] = useState(formatDate(new Date()));
+  const [date, setDate] = useState(toIsoDate(new Date()));
   const [showDate, setShowDate] = useState(false);
   const [showCategories, setShowCategories] = useState(false);
   const [filterType, setFilterType] = useState<FilterType>("all");
@@ -156,6 +170,10 @@ export default function HomeScreen() {
   const [filterTo, setFilterTo] = useState("");
   const [filterDateTarget, setFilterDateTarget] = useState<FilterDateTarget>(null);
   const [showFilterCategories, setShowFilterCategories] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "synced" | "offline">("idle");
+  const [syncError, setSyncError] = useState("");
+  const revisionRef = useRef(-1);
+  const mutationRef = useRef(false);
 
   useEffect(() => {
     getSession().then((storedSession) => {
@@ -164,24 +182,73 @@ export default function HomeScreen() {
     });
   }, []);
 
-  useEffect(() => {
+  const applyCloudState = useCallback((cloud: CloudState) => {
+    if (!Array.isArray(cloud?.transactions) || !Array.isArray(cloud?.deletedTransactions)) return;
+    const revision = Number(cloud.revision) || 0;
+    if (revision < revisionRef.current) return;
+    revisionRef.current = revision;
+    setTransactions(cloud.transactions);
+    setDeletedTransactions(cloud.deletedTransactions);
     if (session?.email) {
-      loadTransactions(session.email).then(setTransactions);
-      loadDeletedTransactions(session.email).then(setDeletedTransactions);
+      Promise.all([
+        saveTransactions(session.email, cloud.transactions),
+        saveDeletedTransactions(session.email, cloud.deletedTransactions),
+      ]).catch(() => setSyncError("Cloud data is safe, but this device could not update its offline cache."));
     }
   }, [session?.email]);
 
-  useEffect(() => {
-    if (session?.email) {
-      saveTransactions(session.email, transactions).catch(() => Alert.alert("Storage error", "Could not save transactions on this device."));
+  const synchronize = useCallback(async (showProgress = true) => {
+    if (!session?.email || !session.token || mutationRef.current) return;
+    mutationRef.current = true;
+    if (showProgress) setSyncStatus("syncing");
+    try {
+      let cloud = await getCloudState(session.token);
+      const migrated = await hasCloudMigration(session.email);
+      if (!migrated || !cloud.initialized) {
+        const [localTransactions, localDeleted] = await Promise.all([
+          loadTransactions(session.email),
+          loadDeletedTransactions(session.email),
+        ]);
+        cloud = await changeCloudState(session.token, "migrate", {
+          transactions: localTransactions,
+          deletedTransactions: localDeleted,
+        });
+        await markCloudMigration(session.email);
+      }
+      applyCloudState(cloud);
+      setSyncError("");
+      setSyncStatus("synced");
+    } catch (error: any) {
+      setSyncError(error.message || "Could not synchronize your transactions.");
+      setSyncStatus("offline");
+    } finally {
+      mutationRef.current = false;
     }
-  }, [transactions, session?.email]);
+  }, [applyCloudState, session]);
 
   useEffect(() => {
-    if (session?.email) {
-      saveDeletedTransactions(session.email, deletedTransactions).catch(() => Alert.alert("Storage error", "Could not save recently deleted transactions."));
-    }
-  }, [deletedTransactions, session?.email]);
+    if (!session?.email) return;
+    let active = true;
+    Promise.all([loadTransactions(session.email), loadDeletedTransactions(session.email)]).then(async ([saved, deleted]) => {
+      if (!active) return;
+      setTransactions(saved);
+      setDeletedTransactions(deleted);
+      await synchronize();
+    });
+    return () => { active = false; };
+  }, [session?.email, synchronize]);
+
+  useEffect(() => {
+    if (!session) return;
+    const interval = setInterval(() => synchronize(false), 30_000);
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") synchronize(false);
+    });
+    return () => {
+      clearInterval(interval);
+      subscription.remove();
+    };
+  }, [session, synchronize]);
 
   const totalIncome = useMemo(
     () => transactions.filter((transaction) => transaction.type === "income").reduce((sum, transaction) => sum + transaction.amount, 0),
@@ -210,7 +277,33 @@ export default function HomeScreen() {
   if (!ready) return <View style={styles.authPage}><Text>Loading...</Text></View>;
   if (!session) return <LoginScreen onLogin={setSession} />;
 
-  function addTransaction() {
+  async function runCloudAction(action: string, payload: object, successMessage?: string) {
+    if (!session?.token) return false;
+    if (mutationRef.current) {
+      Alert.alert("Please wait", "The current change is still syncing.");
+      return false;
+    }
+    mutationRef.current = true;
+    setSyncStatus("syncing");
+    try {
+      const cloud = await changeCloudState(session.token, action, payload);
+      applyCloudState(cloud);
+      setSyncError("");
+      setSyncStatus("synced");
+      if (successMessage) Alert.alert("Success", successMessage);
+      return true;
+    } catch (error: any) {
+      const message = error.message || "Could not save your change.";
+      setSyncError(message);
+      setSyncStatus("offline");
+      Alert.alert("Could not sync", message);
+      return false;
+    } finally {
+      mutationRef.current = false;
+    }
+  }
+
+  async function addTransaction() {
     const numericAmount = Number(amount);
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
       return Alert.alert("Invalid amount", "Please enter a positive amount.");
@@ -218,39 +311,39 @@ export default function HomeScreen() {
     if (type === "expense" && numericAmount > balance) {
       return Alert.alert("Insufficient balance", "This expense cannot be greater than your current balance.");
     }
-    setTransactions((current) => [
-      { id: Date.now().toString(), type, amount: numericAmount, category, date },
-      ...current,
-    ]);
-    setAmount("");
-    Alert.alert("Success", "Transaction added successfully.");
+    const saved = await runCloudAction("add", {
+      transaction: {
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        type,
+        amount: Math.round(numericAmount * 100) / 100,
+        category,
+        date,
+        createdAt: Date.now(),
+      },
+    }, "Transaction added and synced.");
+    if (saved) setAmount("");
   }
 
   async function logout() {
     await clearSession();
+    revisionRef.current = -1;
+    setTransactions([]);
+    setDeletedTransactions([]);
+    setSyncError("");
+    setSyncStatus("idle");
     setSession(null);
   }
 
-  function deleteTransaction(id: string) {
-    const transaction = transactions.find((item) => item.id === id);
-    if (!transaction) return;
-    setTransactions((current) => current.filter((item) => item.id !== id));
-    setDeletedTransactions((current) => [
-      { ...transaction, deletedAt: Date.now() },
-      ...current.filter((item) => item.id !== id),
-    ]);
+  async function deleteTransaction(id: string) {
+    await runCloudAction("delete", { id });
   }
 
-  function restoreTransaction(id: string) {
-    const transaction = deletedTransactions.find((item) => item.id === id);
-    if (!transaction) return;
-    const { deletedAt: _deletedAt, ...restored } = transaction;
-    setTransactions((current) => [restored, ...current]);
-    setDeletedTransactions((current) => current.filter((item) => item.id !== id));
+  async function restoreTransaction(id: string) {
+    await runCloudAction("restore", { id }, "Transaction restored and synced.");
   }
 
-  function permanentlyDelete(id: string) {
-    setDeletedTransactions((current) => current.filter((item) => item.id !== id));
+  async function permanentlyDelete(id: string) {
+    await runCloudAction("permanentDelete", { id });
   }
 
   function clearFilters() {
@@ -272,9 +365,14 @@ export default function HomeScreen() {
         <View>
           <Text style={styles.title}>Personal Finance Tracker</Text>
           <Text style={styles.subtitle}>{session.email}</Text>
+          <Text style={syncStatus === "offline" ? styles.syncError : styles.syncStatus}>
+            {syncStatus === "syncing" ? "Syncing..." : syncStatus === "offline" ? "Offline cache" : "Synced across devices"}
+          </Text>
         </View>
         <Pressable onPress={logout}><Text style={styles.logout}>Log out</Text></Pressable>
       </View>
+
+      {!!syncError && <Text style={styles.syncNotice}>Cloud sync: {syncError}</Text>}
 
       <View style={styles.balanceCard}>
         <Text style={styles.cardTitle}>Remaining Balance</Text>
@@ -307,8 +405,10 @@ export default function HomeScreen() {
         <Text style={styles.label}>Category</Text>
         <Pressable style={styles.input} onPress={() => setShowCategories(true)}><Text>{category}</Text></Pressable>
         <Text style={styles.label}>Date</Text>
-        <Pressable style={styles.input} onPress={() => setShowDate(true)}><Text>{date}</Text></Pressable>
-        <Pressable style={styles.addButton} onPress={addTransaction}><Text style={styles.addButtonText}>Add Transaction</Text></Pressable>
+        <Pressable style={styles.input} onPress={() => setShowDate(true)}><Text>{displayDate(date)}</Text></Pressable>
+        <Pressable style={styles.addButton} onPress={addTransaction} disabled={syncStatus === "syncing"}>
+          <Text style={styles.addButtonText}>{syncStatus === "syncing" ? "Syncing..." : "Add Transaction"}</Text>
+        </Pressable>
       </View>
 
       <View style={styles.filterCard}>
@@ -339,13 +439,13 @@ export default function HomeScreen() {
           <View style={styles.dateFilterColumn}>
             <Text style={styles.dateFilterLabel}>From</Text>
             <Pressable style={styles.dateFilterButton} onPress={() => setFilterDateTarget("from")}>
-              <Text>{filterFrom || "Any date"}</Text>
+              <Text>{filterFrom ? displayDate(filterFrom) : "Any date"}</Text>
             </Pressable>
           </View>
           <View style={styles.dateFilterColumn}>
             <Text style={styles.dateFilterLabel}>To</Text>
             <Pressable style={styles.dateFilterButton} onPress={() => setFilterDateTarget("to")}>
-              <Text>{filterTo || "Any date"}</Text>
+              <Text>{filterTo ? displayDate(filterTo) : "Any date"}</Text>
             </Pressable>
           </View>
         </View>
@@ -361,7 +461,7 @@ export default function HomeScreen() {
           <View key={transaction.id} style={styles.transaction}>
             <View>
               <Text style={styles.transactionCategory}>{transaction.category}</Text>
-              <Text style={styles.transactionDate}>{transaction.date} | {transaction.type}</Text>
+              <Text style={styles.transactionDate}>{displayDate(transaction.date)} | {transaction.type}</Text>
             </View>
             <View style={styles.transactionRight}>
               <Text style={transaction.type === "income" ? styles.transactionIncome : styles.transactionExpense}>
@@ -384,7 +484,7 @@ export default function HomeScreen() {
           <View key={transaction.id} style={styles.transaction}>
             <View>
               <Text style={styles.transactionCategory}>{transaction.category}</Text>
-              <Text style={styles.transactionDate}>{transaction.date} | {transaction.type}</Text>
+              <Text style={styles.transactionDate}>{displayDate(transaction.date)} | {transaction.type}</Text>
             </View>
             <View style={styles.transactionRight}>
               <Text style={transaction.type === "income" ? styles.transactionIncome : styles.transactionExpense}>
@@ -436,7 +536,7 @@ export default function HomeScreen() {
           display="calendar"
           onChange={(_, selected) => {
             setShowDate(false);
-            if (selected) setDate(formatDate(selected));
+            if (selected) setDate(toIsoDate(selected));
           }}
         />
       )}
@@ -449,8 +549,8 @@ export default function HomeScreen() {
             const target = filterDateTarget;
             setFilterDateTarget(null);
             if (!selected) return;
-            if (target === "from") setFilterFrom(formatDate(selected));
-            if (target === "to") setFilterTo(formatDate(selected));
+            if (target === "from") setFilterFrom(toIsoDate(selected));
+            if (target === "to") setFilterTo(toIsoDate(selected));
           }}
         />
       )}
@@ -463,6 +563,9 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 },
   title: { fontSize: 27, fontWeight: "bold", marginBottom: 6 },
   subtitle: { fontSize: 12, color: "#666" },
+  syncStatus: { fontSize: 12, color: "#138a52", marginTop: 4 },
+  syncError: { fontSize: 12, color: "#b33d3d", marginTop: 4 },
+  syncNotice: { color: "#8a3333", backgroundColor: "#fff0f0", padding: 12, borderRadius: 8, marginBottom: 12 },
   logout: { fontWeight: "700", padding: 8 },
   balanceCard: { backgroundColor: "#fff", padding: 24, borderRadius: 12, marginBottom: 12 },
   smallCard: { flex: 1, backgroundColor: "#fff", padding: 18, borderRadius: 12 },

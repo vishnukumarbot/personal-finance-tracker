@@ -1,10 +1,12 @@
 # Finance Tracker mobile app
 
-This is the Expo SDK 57 mobile client for Ledger. It uses the same email OTP service as the web app and stores transactions locally on the device.
+This is the Expo SDK 57 mobile client for Ledger. It uses the same email OTP service and synchronized Netlify data store as the web app. A local device cache keeps the last synchronized data visible if the connection is temporarily unavailable.
 
 Login requires the demonstration password `Cursor@123` followed by the emailed OTP. The fixed client-side password is intentionally simple for project demonstration and should be replaced with server-side authentication for production use.
 
 The transaction screen supports type, category, and inclusive From/To date filters. Transaction dates and filter dates use the native Android/iOS date picker.
+
+Sign in with the same email on web and Android to access the same transactions. The app refreshes every 30 seconds while open and whenever it returns to the foreground. Transaction changes require an internet connection so multiple devices cannot create conflicting offline copies.
 
 ## Run in Expo Go
 

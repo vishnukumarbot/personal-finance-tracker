@@ -16,6 +16,7 @@ function TransactionForm({ balance, onAdd }) {
   const [category, setCategory] = useState(CATEGORY_OPTIONS.expense[0]);
   const [date, setDate] = useState(todayString());
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const categories = useMemo(() => CATEGORY_OPTIONS[type], [type]);
 
   function changeType(nextType) {
@@ -24,7 +25,7 @@ function TransactionForm({ balance, onAdd }) {
     setError("");
   }
 
-  function submit(event) {
+  async function submit(event) {
     event.preventDefault();
     const validationError = transactionValidationError(
       { type, amount, category, date },
@@ -36,16 +37,23 @@ function TransactionForm({ balance, onAdd }) {
       return;
     }
 
-    onAdd({
-      id: createId(),
-      type,
-      amount: Math.round(Number(amount) * 100) / 100,
-      category,
-      date,
-      createdAt: Date.now(),
-    });
-    setAmount("");
-    setError("");
+    setSaving(true);
+    try {
+      const saved = await onAdd({
+        id: createId(),
+        type,
+        amount: Math.round(Number(amount) * 100) / 100,
+        category,
+        date,
+        createdAt: Date.now(),
+      });
+      if (saved) {
+        setAmount("");
+        setError("");
+      }
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -115,8 +123,8 @@ function TransactionForm({ balance, onAdd }) {
 
       {error && <div className="error" id="transaction-error" role="alert">{error}</div>}
 
-      <button className="primary add-button" type="submit">
-        <span aria-hidden="true">+</span> Add {type}
+      <button className="primary add-button" type="submit" disabled={saving}>
+        <span aria-hidden="true">+</span> {saving ? "Saving..." : `Add ${type}`}
       </button>
     </form>
   );

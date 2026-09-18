@@ -4,6 +4,8 @@ const transactionKey = (email) =>
   `finance-tracker-transactions-v2:${String(email || "").trim().toLowerCase()}`;
 const deletedKey = (email) =>
   `finance-tracker-deleted-v1:${String(email || "").trim().toLowerCase()}`;
+const migrationKey = (email) =>
+  `finance-tracker-cloud-migrated-v1:${String(email || "").trim().toLowerCase()}`;
 
 function validDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return false;
@@ -88,6 +90,24 @@ export function saveDeletedTransactions(email, transactions) {
   try {
     if (!email) return false;
     window.localStorage.setItem(deletedKey(email), JSON.stringify(transactions));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function hasCloudMigration(email) {
+  try {
+    return Boolean(email) && window.localStorage.getItem(migrationKey(email)) === "true";
+  } catch {
+    return false;
+  }
+}
+
+export function markCloudMigration(email) {
+  try {
+    if (!email) return false;
+    window.localStorage.setItem(migrationKey(email), "true");
     return true;
   } catch {
     return false;

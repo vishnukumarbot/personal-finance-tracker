@@ -234,6 +234,15 @@ export default function App() {
     ) || normalized;
   }, [expenseCategories, runCloudAction]);
 
+  const removeExpenseCategory = useCallback(
+    (category) => runCloudAction(
+      "removeExpenseCategory",
+      { category },
+      "Expense category removed from every device.",
+    ),
+    [runCloudAction],
+  );
+
   const deleteTransaction = useCallback((id) => {
     runCloudAction("delete", { id }, "Transaction moved to recently deleted.");
   }, [runCloudAction]);
@@ -304,9 +313,11 @@ export default function App() {
           <div className="main-column">
             <TransactionForm
               balance={summary.balance}
+              customExpenseCategories={customExpenseCategories}
               expenseCategories={expenseCategories}
               onAdd={addTransaction}
               onAddExpenseCategory={addExpenseCategory}
+              onRemoveExpenseCategory={removeExpenseCategory}
             />
             <Filters
               categories={filterCategories}

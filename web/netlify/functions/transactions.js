@@ -210,6 +210,15 @@ export function applyAction(state, body) {
       if (categories.length === (state.customExpenseCategories || []).length) return state;
       return { ...state, initialized: true, customExpenseCategories: categories };
     }
+    case "removeExpenseCategory": {
+      const category = normalizeCategoryName(body.category);
+      const key = category.toLocaleLowerCase();
+      const categories = (state.customExpenseCategories || []).filter(
+        (item) => item.toLocaleLowerCase() !== key,
+      );
+      if (categories.length === (state.customExpenseCategories || []).length) return state;
+      return { ...state, initialized: true, customExpenseCategories: categories };
+    }
     case "delete": {
       const id = String(body.id || "");
       const transaction = state.transactions.find((item) => item.id === id);

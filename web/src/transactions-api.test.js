@@ -76,3 +76,18 @@ test("migration merges custom expense categories across devices", () => {
 
   assert.deepEqual(result.customExpenseCategories, ["Pets", "Home Maintenance"]);
 });
+
+test("removing a custom expense category keeps existing transactions", () => {
+  const expense = { ...income, id: "expense-1", type: "expense", amount: 25, category: "Pet Care" };
+  let state = {
+    ...freshState(),
+    initialized: true,
+    transactions: [income, expense],
+    customExpenseCategories: ["Pet Care", "Home Maintenance"],
+  };
+
+  state = applyAction(state, { action: "removeExpenseCategory", category: "pet care" });
+
+  assert.deepEqual(state.customExpenseCategories, ["Home Maintenance"]);
+  assert.equal(state.transactions.find((item) => item.id === expense.id)?.category, "Pet Care");
+});

@@ -569,6 +569,47 @@ select:focus {
 .cancel-category-button { padding-inline: 5px; }
 .category-error { margin-top: 10px; }
 
+.custom-category-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 13px;
+  color: #647069;
+  font-size: 0.72rem;
+}
+
+.custom-category-list > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.custom-category-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px 5px 9px;
+  border: 1px solid #d4e2da;
+  border-radius: 999px;
+  background: #f3f8f5;
+  color: #315b47;
+  font-weight: 700;
+}
+
+.custom-category-chip button {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #deebe3;
+  color: #315b47;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.custom-category-chip button:hover { background: #f4deda; color: #963d37; }
+.custom-category-list small { color: #859089; }
+
 .primary,
 .small-button {
   border: 0;

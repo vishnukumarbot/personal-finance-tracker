@@ -10,7 +10,14 @@ function createId() {
   return window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function TransactionForm({ balance, expenseCategories, onAdd, onAddExpenseCategory }) {
+function TransactionForm({
+  balance,
+  customExpenseCategories,
+  expenseCategories,
+  onAdd,
+  onAddExpenseCategory,
+  onRemoveExpenseCategory,
+}) {
   const [type, setType] = useState("expense");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState(CATEGORY_OPTIONS.expense[0]);
@@ -21,6 +28,7 @@ function TransactionForm({ balance, expenseCategories, onAdd, onAddExpenseCatego
   const [customCategory, setCustomCategory] = useState("");
   const [categoryError, setCategoryError] = useState("");
   const [savingCategory, setSavingCategory] = useState(false);
+  const [removingCategory, setRemovingCategory] = useState("");
   const categories = useMemo(
     () => (type === "expense" ? expenseCategories : CATEGORY_OPTIONS.income),
     [expenseCategories, type],
@@ -56,6 +64,23 @@ function TransactionForm({ balance, expenseCategories, onAdd, onAddExpenseCatego
       }
     } finally {
       setSavingCategory(false);
+    }
+  }
+
+  async function removeCustomCategory(value) {
+    const confirmed = window.confirm(
+      `Remove "${value}" from your custom categories? Existing transactions will stay unchanged.`,
+    );
+    if (!confirmed) return;
+
+    setRemovingCategory(value);
+    try {
+      const removed = await onRemoveExpenseCategory(value);
+      if (removed && category.toLocaleLowerCase() === value.toLocaleLowerCase()) {
+        setCategory(CATEGORY_OPTIONS.expense[0]);
+      }
+    } finally {
+      setRemovingCategory("");
     }
   }
 
@@ -193,6 +218,29 @@ function TransactionForm({ balance, expenseCategories, onAdd, onAddExpenseCatego
           >
             Cancel
           </button>
+        </div>
+      )}
+
+      {type === "expense" && customExpenseCategories.length > 0 && (
+        <div className="custom-category-list" aria-label="Custom expense categories">
+          <span>Custom categories</span>
+          <div>
+            {customExpenseCategories.map((item) => (
+              <span className="custom-category-chip" key={item}>
+                {item}
+                <button
+                  type="button"
+                  onClick={() => removeCustomCategory(item)}
+                  disabled={Boolean(removingCategory)}
+                  aria-label={`Remove ${item} category`}
+                  title="Remove custom category"
+                >
+                  {removingCategory === item ? "…" : "×"}
+                </button>
+              </span>
+            ))}
+          </div>
+          <small>Removing a category does not delete its existing transactions.</small>
         </div>
       )}
 

@@ -5,7 +5,7 @@ Ledger is a responsive React web and Expo Android app for recording income and e
 ## Features
 
 - Add validated income and expense transactions with an amount, category, and date
-- Create custom expense categories that synchronize to every device on the same account
+- Create or remove custom expense categories that synchronize to every device on the same account
 - Prevent expenses and other actions that would create a negative balance
 - Filter by transaction type, category, and inclusive date range
 - View total income, total expenses, and remaining balance

@@ -396,6 +396,28 @@ export default function HomeScreen() {
     setShowCategories(false);
   }
 
+  async function removeCustomExpenseCategory(value: string) {
+    const cloud = await runCloudAction(
+      "removeExpenseCategory",
+      { category: value },
+      "Expense category removed from every device.",
+    );
+    if (cloud && category.toLocaleLowerCase() === value.toLocaleLowerCase()) {
+      setCategory(EXPENSE_CATEGORIES[0]);
+    }
+  }
+
+  function confirmRemoveCustomExpenseCategory(value: string) {
+    Alert.alert(
+      "Remove custom category?",
+      `Remove "${value}" from every device? Existing transactions will stay unchanged.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Remove", style: "destructive", onPress: () => { void removeCustomExpenseCategory(value); } },
+      ],
+    );
+  }
+
   async function addTransaction() {
     const numericAmount = Number(amount);
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
@@ -612,11 +634,32 @@ export default function HomeScreen() {
           <View style={styles.modalCard}>
             <Text style={styles.sectionTitle}>Select Category</Text>
             <ScrollView keyboardShouldPersistTaps="handled">
-              {categoryOptions.map((value) => (
-                <Pressable key={value} style={styles.option} onPress={() => { setCategory(value); setShowCategories(false); }}>
-                  <Text style={styles.optionText}>{value}</Text>
-                </Pressable>
-              ))}
+              {categoryOptions.map((value) => {
+                const custom = customExpenseCategories.some(
+                  (item) => item.toLocaleLowerCase() === value.toLocaleLowerCase(),
+                );
+                if (!custom) {
+                  return (
+                    <Pressable key={value} style={styles.option} onPress={() => { setCategory(value); setShowCategories(false); }}>
+                      <Text style={styles.optionText}>{value}</Text>
+                    </Pressable>
+                  );
+                }
+                return (
+                  <View key={value} style={styles.categoryOptionRow}>
+                    <Pressable style={styles.categoryOptionSelect} onPress={() => { setCategory(value); setShowCategories(false); }}>
+                      <Text style={styles.optionText}>{value}</Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.categoryRemoveButton}
+                      onPress={() => confirmRemoveCustomExpenseCategory(value)}
+                      disabled={syncStatus === "syncing"}
+                    >
+                      <Text style={styles.categoryRemoveButtonText}>Remove</Text>
+                    </Pressable>
+                  </View>
+                );
+              })}
               {type === "expense" && (
                 <View style={styles.customCategoryEditor}>
                   <Text style={styles.label}>Add a custom expense category</Text>
@@ -751,6 +794,10 @@ const styles = StyleSheet.create({
   modalCard: { backgroundColor: "#fff", padding: 22, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "85%" },
   option: { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: "#eee" },
   optionText: { fontSize: 17 },
+  categoryOptionRow: { flexDirection: "row", alignItems: "center", borderBottomWidth: 1, borderBottomColor: "#eee" },
+  categoryOptionSelect: { flex: 1, paddingVertical: 15 },
+  categoryRemoveButton: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 7, backgroundColor: "#ffecec" },
+  categoryRemoveButtonText: { color: "#b33d3d", fontSize: 12, fontWeight: "700" },
   customCategoryEditor: { paddingTop: 18 },
   customCategoryRow: { flexDirection: "row", gap: 8, alignItems: "stretch" },
   customCategoryInput: { flex: 1, borderWidth: 1, borderColor: "#ccc", borderRadius: 8, padding: 12, fontSize: 16, backgroundColor: "#fff" },
